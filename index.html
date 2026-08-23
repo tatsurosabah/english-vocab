@@ -112,6 +112,11 @@
   .row .h{display:block;font-size:17px;line-height:1.35;word-break:break-word;}
   .row .e{display:block;font-size:13px;color:var(--muted);margin-top:3px;line-height:1.45;}
   .row .miss{font-size:11px;color:#B0705E;letter-spacing:.04em;flex:none;margin-top:5px;}
+  .rowbtn{flex:none;border:1px solid var(--hair);background:var(--surface);color:var(--muted);
+    border-radius:999px;font-size:11px;padding:5px 9px;cursor:pointer;font-family:inherit;
+    letter-spacing:.04em;margin-top:2px;}
+  .rowbtn.mark{min-width:52px;}
+  .rowbtn.mark.on{background:var(--known);border-color:var(--known);color:#fff;}
   .row.done .h,.row.done .e{opacity:.4;}
 
   /* ---------- talk ---------- */
@@ -695,12 +700,21 @@ function renderList(){
         <span class="dot"></span>
         <span class="body"><span class="h term">${w.word}</span><span class="e">${w.ja}</span></span>
         ${(w.miss>0)?`<span class="miss">✕${w.miss}</span>`:''}
+        <button class="rowbtn edit" data-edit="${w.id}" title="意味を編集">訳</button>
+        <button class="rowbtn mark ${w.done?'on':''}" data-mark="${w.id}">${w.done?'覚えた':'まだ'}</button>
       </div>`).join('')}
     </div>`;
   }).join('');
   body.innerHTML=html||'<p class="note">該当する単語がありません。</p>';
-  body.querySelectorAll('.row').forEach(r=>r.onclick=()=>{
-    const w=DB.words.find(x=>x.id==r.dataset.id); w.done=!w.done; save(); renderList();
+  body.querySelectorAll('[data-mark]').forEach(b=>b.onclick=ev=>{
+    ev.stopPropagation();
+    const w=DB.words.find(x=>x.id==b.dataset.mark); w.done=!w.done; save(); renderList();
+  });
+  body.querySelectorAll('[data-edit]').forEach(b=>b.onclick=ev=>{
+    ev.stopPropagation();
+    const w=DB.words.find(x=>x.id==b.dataset.edit);
+    const nu=prompt(`「${w.word}」の意味を編集`, w.ja);
+    if(nu!==null && nu.trim() && nu.trim()!==w.ja){ w.ja=nu.trim(); save(); renderList(); toast('意味を更新しました'); }
   });
   body.querySelectorAll('.name').forEach(n=>n.onclick=()=>{
     const old=n.dataset.cat;
