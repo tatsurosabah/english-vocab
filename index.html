@@ -165,6 +165,13 @@
 
   /* ---------- stats ---------- */
   .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-bottom:30px;}
+  h2.subtitle{font-size:12px;font-weight:500;letter-spacing:.14em;color:var(--muted);
+    margin:0 2px 12px;padding-bottom:9px;border-bottom:1px solid var(--hair);}
+  .hrow{display:flex;align-items:center;gap:12px;padding:10px 2px;}
+  .hrow .rank{font-size:11px;color:var(--faint);width:18px;flex:none;}
+  .hrow .hw{flex:1;min-width:0;font-size:15px;word-break:break-word;}
+  .hrow .hj{font-size:12px;color:var(--muted);margin-top:2px;}
+  .hrow .hn{flex:none;font-size:12px;color:#B0705E;}
   .stat{background:var(--surface);border:1px solid var(--hair);border-radius:18px;padding:20px 18px;}
   .stat .n{font-size:34px;font-weight:300;letter-spacing:.02em;}
   .stat .l{font-size:11px;color:var(--muted);letter-spacing:.1em;margin-top:6px;}
@@ -220,6 +227,7 @@
       <button data-f="all" class="active">すべて</button>
       <button data-f="todo">未習得</button>
       <button data-f="done">習得済み</button>
+      <button data-f="hard">苦戦中</button>
     </div>
     <div class="filters scroll" id="catFilters"></div>
     <div class="count" id="listCount"></div>
@@ -270,6 +278,8 @@
       <div class="stat"><div class="n" id="stCats">0</div><div class="l">カテゴリ数</div></div>
       <div class="stat"><div class="n" id="stTalks">0</div><div class="l">今日の会話練習</div></div>
     </div>
+    <h2 class="subtitle">苦手な単語 TOP10</h2>
+    <div id="hardTop"></div>
     <div class="setting">
       <span class="lab">同期キー</span>
       <input class="text" id="syncKeyInput" placeholder="キーを貼り付け" autocapitalize="off"
@@ -351,16 +361,40 @@ function mergeExamples(db){
   if(changed) localStorage.setItem('ev_db', JSON.stringify(db));
   return db;
 }
+/* 意味・カテゴリの改訂を反映する（非破壊）
+   - 習得済み(done)は一切変更しない
+   - 自分で編集した語(edited)も変更しない
+   - それ以外だけ、SEED側の見直し済みの意味/カテゴリに更新する */
+function mergeMeta(db){
+  if(typeof SEED_WORDS==='undefined') return db;
+  if(typeof META_V==='undefined') return db;
+  if(db.metaV===META_V) return db;
+  const byWord=new Map();
+  SEED_WORDS.forEach(s=>byWord.set((s.word||'').toLowerCase(), s));
+  let n=0;
+  db.words.forEach(w=>{
+    if(w.done) return;      // 習得済みは触らない
+    if(w.edited) return;    // 自分で直したものは触らない
+    const s=byWord.get((w.word||'').toLowerCase());
+    if(!s) return;
+    if(s.ja && s.ja!==w.ja){ w.ja=s.ja; n++; }
+    if(s.cat && s.cat!==w.cat){ w.cat=s.cat; }
+  });
+  db.metaV=META_V;
+  localStorage.setItem('ev_db', JSON.stringify(db));
+  if(n) setTimeout(()=>toast(`${n}件の意味を更新しました`),800);
+  return db;
+}
 function load(){
   const raw = localStorage.getItem('ev_db');
-  if(raw){ try{ const p = JSON.parse(raw); if(p.v === SEED_V) return mergeExamples(p); }catch{} }
+  if(raw){ try{ const p = JSON.parse(raw); if(p.v === SEED_V) return mergeMeta(mergeExamples(p)); }catch{} }
   const src = (typeof SEED_WORDS!=='undefined' && SEED_WORDS.length) ? SEED_WORDS : FALLBACK_WORDS;
   const words = src.map((w,i)=>({
     id:i+1, word:w.word, ja:w.ja||'',
     ex:w.ex||'', exJa:w.exJa||'',
     cat:w.cat||'未分類', done:!!w.done, miss:w.miss||0
   }));
-  return { v:SEED_V, words, stats:{}, nextId:words.length+1, remind:'20:00', voice:'' };
+  return { v:SEED_V, metaV:(typeof META_V!=='undefined'?META_V:0), words, stats:{}, nextId:words.length+1, remind:'20:00', voice:'' };
 }
 function save(){ localStorage.setItem('ev_db', JSON.stringify(DB)); }
 
@@ -768,11 +802,28 @@ document.getElementById('btnOpenGpt').onclick=async()=>{
   window.open('https://chatgpt.com/?q='+encodeURIComponent(talkPrompt()),'_blank','noopener');
 };
 
+/* 苦手な単語 TOP10（間違えた回数が多い順） */
+function renderHardTop(){
+  const box=document.getElementById('hardTop');
+  if(!box) return;
+  const top=DB.words.filter(w=>(w.miss||0)>0).sort((a,b)=>(b.miss||0)-(a.miss||0)).slice(0,10);
+  if(top.length===0){
+    box.innerHTML='<p class="note">まだ記録がありません。復習で「まだ」を押すとここに溜まります。</p>';
+    return;
+  }
+  box.innerHTML=top.map((w,i)=>`<div class="hrow">
+      <span class="rank">${i+1}</span>
+      <span class="hw"><span class="term">${w.word}</span><div class="hj">${w.ja}</div></span>
+      <span class="hn">✕${w.miss}</span>
+    </div>`).join('');
+}
+
 /* ---------------- list ---------------- */
 let listFilter='all';
 let catFilter='all';
 function matchFilter(w){
   if(catFilter!=='all' && w.cat!==catFilter) return false;
+  if(listFilter==='hard') return (w.miss||0)>0;
   return listFilter==='all'||(listFilter==='done'?w.done:!w.done);
 }
 function renderCatFilters(){
@@ -796,25 +847,37 @@ function renderList(){
   const doneAll=DB.words.filter(w=>w.done).length;
   document.getElementById('listCount').textContent=
     `表示 ${shown} 語 ／ 全 ${DB.words.length} 語（習得 ${doneAll}）`;
-  const html=cats.map(cat=>{
-    const all=DB.words.filter(w=>w.cat===cat);
-    const ws=all.filter(matchFilter);
-    if(ws.length===0) return '';
-    const done=all.filter(w=>w.done).length;
-    return `<div class="cat">
-      <div class="cat-head">
-        <span class="name" data-cat="${cat}">${cat}</span>
-        <span class="meta">${done} / ${all.length}</span>
-      </div>
-      ${ws.map(w=>`<div class="row ${w.done?'done':''}" data-id="${w.id}">
+  const rowHtml=w=>`<div class="row ${w.done?'done':''}" data-id="${w.id}">
         <span class="dot"></span>
         <span class="body"><span class="h term">${w.word}</span><span class="e">${w.ja}</span></span>
         ${(w.miss>0)?`<span class="miss">✕${w.miss}</span>`:''}
         <button class="rowbtn edit" data-edit="${w.id}" title="意味を編集">訳</button>
         <button class="rowbtn mark ${w.done?'on':''}" data-mark="${w.id}">${w.done?'覚えた':'まだ'}</button>
-      </div>`).join('')}
-    </div>`;
-  }).join('');
+      </div>`;
+  let html;
+  if(listFilter==='hard'){
+    // 苦戦中はカテゴリを跨いで「間違えた回数が多い順」に一列で表示
+    const ws=DB.words.filter(matchFilter).sort((a,b)=>(b.miss||0)-(a.miss||0));
+    html = ws.length ? `<div class="cat">
+      <div class="cat-head">
+        <span class="name">間違えた回数が多い順</span>
+        <span class="meta">${ws.length} 語</span>
+      </div>${ws.map(rowHtml).join('')}</div>` : '';
+  } else {
+    html=cats.map(cat=>{
+      const all=DB.words.filter(w=>w.cat===cat);
+      const ws=all.filter(matchFilter);
+      if(ws.length===0) return '';
+      const done=all.filter(w=>w.done).length;
+      return `<div class="cat">
+        <div class="cat-head">
+          <span class="name" data-cat="${cat}">${cat}</span>
+          <span class="meta">${done} / ${all.length}</span>
+        </div>
+        ${ws.map(rowHtml).join('')}
+      </div>`;
+    }).join('');
+  }
   body.innerHTML=html||'<p class="note">該当する単語がありません。</p>';
   body.querySelectorAll('[data-mark]').forEach(b=>b.onclick=ev=>{
     ev.stopPropagation();
@@ -824,7 +887,7 @@ function renderList(){
     ev.stopPropagation();
     const w=DB.words.find(x=>x.id==b.dataset.edit);
     const nu=prompt(`「${w.word}」の意味を編集`, w.ja);
-    if(nu!==null && nu.trim() && nu.trim()!==w.ja){ w.ja=nu.trim(); save(); renderList(); toast('意味を更新しました'); }
+    if(nu!==null && nu.trim() && nu.trim()!==w.ja){ w.ja=nu.trim(); w.edited=true; save(); renderList(); toast('意味を更新しました'); }
   });
   body.querySelectorAll('.name').forEach(n=>n.onclick=()=>{
     const old=n.dataset.cat;
@@ -876,6 +939,7 @@ function renderStats(){
   document.getElementById('stTotal').textContent=DB.words.filter(w=>w.done).length;
   document.getElementById('stWords').textContent=DB.words.length;
   document.getElementById('stCats').textContent=new Set(DB.words.map(w=>w.cat)).size;
+  renderHardTop();
   document.getElementById('stTalks').textContent=stat().talks||0;
   document.getElementById('remindTime').value=DB.remind;
   const sk=document.getElementById('syncKeyInput');
