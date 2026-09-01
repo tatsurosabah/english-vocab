@@ -255,11 +255,7 @@
 
     <div class="sug">
       <label class="fld">おすすめから追加</label>
-      <div class="filters" id="sugFilters">
-        <button data-k="all" class="active">すべて</button>
-        <button data-k="会話・インタビュー">会話</button>
-        <button data-k="ニュース・ドキュメンタリー">ニュース</button>
-      </div>
+      <div class="filters scroll" id="sugFilters"></div>
       <div id="sugBody"></div>
     </div>
   </section>
@@ -439,14 +435,14 @@ function mergeMeta(db){
 }
 function load(){
   const raw = localStorage.getItem('ev_db');
-  if(raw){ try{ const p = JSON.parse(raw); if(p.v === SEED_V) return mergeMeta(mergeExamples(p)); }catch{} }
+  if(raw){ try{ const p = JSON.parse(raw); if(p.v === SEED_V) return ensureShape(mergeMeta(mergeExamples(p))); }catch{} }
   const src = (typeof SEED_WORDS!=='undefined' && SEED_WORDS.length) ? SEED_WORDS : FALLBACK_WORDS;
   const words = src.map((w,i)=>({
     id:i+1, word:w.word, ja:w.ja||'',
     ex:w.ex||'', exJa:w.exJa||'',
     cat:w.cat||'未分類', done:!!w.done, miss:w.miss||0
   }));
-  return { v:SEED_V, metaV:(typeof META_V!=='undefined'?META_V:0), words, stats:{}, nextId:words.length+1, remind:'20:00', voice:'' };
+  return ensureShape({ v:SEED_V, metaV:(typeof META_V!=='undefined'?META_V:0), words, stats:{}, nextId:words.length+1, remind:'20:00', voice:'' });
 }
 function ensureShape(db){ if(!Array.isArray(db.videos)) db.videos=[]; return db; }
 function save(){ localStorage.setItem('ev_db', JSON.stringify(DB)); }
@@ -638,7 +634,7 @@ document.getElementById('nav').addEventListener('click',e=>{
     document.getElementById(id).classList.toggle('active',k===t));
   if(t==='review') enterReview();
   if(t==='list'){ renderCatFilters(); renderList(); }
-  if(t==='video'){ renderVideos(); renderSuggest(); }
+  if(t==='video'){ renderVideos(); renderSugFilters(); renderSuggest(); }
   if(t==='stats') renderStats();
 });
 
@@ -1044,17 +1040,24 @@ function renderSuggest(){
     const vid=b.dataset.add;
     if((DB.videos||[]).some(v=>v.vid===vid)){ toast('すでに追加済みです'); return; }
     const v=list.find(x=>x.vid===vid);
-    const type = v.kind==='ニュース・ドキュメンタリー' ? 'listen' : 'watch';
+    const type = (v.kind==='ニュース・報道'||v.kind==='ポッドキャスト') ? 'listen' : 'watch';
     DB.videos.push({vid:v.vid,title:v.title,author:v.author,type,watched:false,added:Date.now()});
     save(); renderSuggest(); renderVideos();
     toast('追加しました');
   });
 }
-document.querySelectorAll('#sugFilters button').forEach(b=>b.onclick=()=>{
-  sugKind=b.dataset.k;
-  document.querySelectorAll('#sugFilters button').forEach(x=>x.classList.toggle('active',x===b));
-  renderSuggest();
-});
+function renderSugFilters(){
+  const box=document.getElementById('sugFilters');
+  if(!box) return;
+  const list=(typeof SUGGESTED_VIDEOS!=='undefined')?SUGGESTED_VIDEOS:[];
+  const kinds=[...new Set(list.map(v=>v.kind))];
+  if(sugKind!=='all' && !kinds.includes(sugKind)) sugKind='all';
+  box.innerHTML=`<button data-k="all" class="${sugKind==='all'?'active':''}">すべて</button>`+
+    kinds.map(k=>`<button data-k="${k}" class="${sugKind===k?'active':''}">${k}</button>`).join('');
+  box.querySelectorAll('button').forEach(b=>b.onclick=()=>{
+    sugKind=b.dataset.k; renderSugFilters(); renderSuggest();
+  });
+}
 
 /* ---------------- import ---------------- */
 document.getElementById('btnCopyPrompt').onclick=async()=>{
