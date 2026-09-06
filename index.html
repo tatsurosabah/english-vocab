@@ -620,6 +620,15 @@ function speak(text, onend){
   }
   speakTTS(text,onend);
 }
+/* iOSは初回の自動再生をブロックするため、最初の操作で音声を解禁しておく */
+let audioUnlocked=false;
+function unlockAudio(){
+  if(audioUnlocked) return;
+  audioUnlocked=true;
+  try{ if('speechSynthesis' in window) speechSynthesis.resume(); }catch{}
+}
+['touchstart','click'].forEach(ev=>
+  document.addEventListener(ev,unlockAudio,{once:true,passive:true}));
 function zhVoices(){ return speechSynthesis.getVoices().filter(v=>v.lang&&v.lang.toLowerCase().startsWith('en')); }
 function speakTTS(text, onend){
   if(!('speechSynthesis' in window)||!text) return;
