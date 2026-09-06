@@ -1,4 +1,4 @@
-const CACHE = 'ev-v10';
+const CACHE = 'ev-v11';
 const ASSETS = [
   './',
   './index.html',

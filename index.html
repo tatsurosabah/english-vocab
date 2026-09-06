@@ -174,6 +174,14 @@
   .setting{display:flex;align-items:center;justify-content:space-between;padding:16px 2px;
     border-bottom:1px solid var(--hair);}
   .setting .lab{font-size:15px;}
+  .switch{position:relative;display:inline-block;width:46px;height:27px;flex:none;}
+  .switch input{opacity:0;width:0;height:0;position:absolute;}
+  .switch .track{position:absolute;inset:0;background:var(--faint);border-radius:999px;
+    transition:background .2s;cursor:pointer;}
+  .switch .track::after{content:'';position:absolute;width:21px;height:21px;left:3px;top:3px;
+    background:#fff;border-radius:50%;transition:transform .2s;}
+  .switch input:checked + .track{background:var(--accent);}
+  .switch input:checked + .track::after{transform:translateX(19px);}
   .setting input[type=time],.setting select{background:var(--surface);border:1px solid var(--hair);
     border-radius:10px;padding:7px 10px;font-size:15px;font-family:inherit;color:var(--ink);max-width:60%;}
   .note{font-size:12px;color:var(--muted);line-height:1.7;margin-top:14px;}
@@ -343,6 +351,10 @@
     <div class="setting">
       <span class="lab">毎日のリマインド</span>
       <input type="time" id="remindTime" value="20:00">
+    </div>
+    <div class="setting">
+      <span class="lab">カードを自動で読み上げ</span>
+      <label class="switch"><input type="checkbox" id="autoplayChk" checked><span class="track"></span></label>
     </div>
     <div class="setting">
       <span class="lab">読み上げ音声</span>
@@ -720,12 +732,16 @@ function nextCard(){
     ev.stopPropagation(); speak(b.dataset.say);
   }));
   attachSwipe(card);
+  // 新しい単語が出たら自動で読み上げ（設定で切替、既定ON）
+  if(DB.autoplay!==false) setTimeout(()=>speak(current.word),250);
 }
 function reveal(){
   if(revealed||!current) return;
   revealed=true;
   document.getElementById('card').classList.add('revealed');
   document.getElementById('hint').style.opacity=0;
+  // 意味を開いたら例文も読み上げ（自動読み上げONのとき）
+  if(DB.autoplay!==false && current.ex) setTimeout(()=>speak(current.ex),200);
 }
 function judge(known){
   if(!current) return;
@@ -1163,7 +1179,12 @@ function renderStats(){
       ? (pend? `※ 同期待ち ${pend}件（オンラインになると自動送信）` : '※ 同期済み。Tideに学習時間を送信しています。')
       : '※ Tideに学習時間を自動送信します。全端末で同じキーを入れてください。';
   populateVoices();
+  const ap=document.getElementById('autoplayChk'); if(ap) ap.checked = DB.autoplay!==false;
 }
+document.getElementById('autoplayChk').onchange=e=>{
+  DB.autoplay=e.target.checked; save();
+  toast(e.target.checked?'自動読み上げ ON':'自動読み上げ OFF');
+};
 document.getElementById('voiceSel').onchange=e=>{ DB.voice=e.target.value; save(); speak('This is an English sample.'); };
 document.getElementById('syncKeyInput').onchange=e=>{
   setSyncKey(e.target.value);
