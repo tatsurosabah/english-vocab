@@ -138,6 +138,15 @@
   .qrow .qdel{flex:none;border:0;background:none;color:var(--faint);font-size:18px;cursor:pointer;padding:4px 6px;}
   .qhead{font-size:11px;letter-spacing:.14em;color:var(--muted);margin:22px 2px 6px;text-transform:uppercase;}
 
+  .mrow{display:flex;align-items:flex-start;gap:12px;padding:13px 2px;border-bottom:1px solid var(--hair);}
+  .mrow .mbody{flex:1;min-width:0;}
+  .mrow .mt{font-size:15px;line-height:1.5;word-break:break-word;}
+  .mrow .ma{font-size:11px;color:var(--faint);letter-spacing:.06em;margin-top:5px;}
+  .mrow .mops{display:flex;gap:6px;flex:none;}
+  .mrow.done .mt{opacity:.4;text-decoration:line-through;}
+  .rowbtn.del{color:#B0705E;}
+  .rowbtn.conv{border-color:var(--accent);color:var(--accent);}
+
   /* ---------- import ---------- */
   label.fld{display:block;font-size:11px;letter-spacing:.14em;color:var(--muted);
     text-transform:uppercase;margin:0 2px 8px;}
@@ -244,6 +253,19 @@
       <button id="btnStill">まだ</button>
       <button class="known" id="btnKnown">覚えた</button>
     </div>
+  </section>
+
+  <!-- ===== メモ ===== -->
+  <section class="screen" id="s-memo">
+    <h1 class="title">メモ</h1>
+    <div class="filters" id="memoKind">
+      <button data-k="heard" class="active">聞いたけど分からない</button>
+      <button data-k="said">言えなかった</button>
+    </div>
+    <textarea id="memoInput" placeholder="その場でメモ（キーボードのマイクで音声入力もできます）" autocapitalize="off" spellcheck="false"></textarea>
+    <button class="btn solid" id="btnMemoAdd">メモする</button>
+    <div class="count" id="memoCount" style="margin-top:22px;"></div>
+    <div id="memoBody"></div>
   </section>
 
   <!-- ===== 動画 ===== -->
@@ -382,6 +404,10 @@
       <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M10 10l5 2-5 2z"/></svg>
       動画
     </button>
+    <button data-t="memo">
+      <svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v5h4M9 12h7M9 16h5"/></svg>
+      メモ
+    </button>
     <button data-t="list">
       <svg viewBox="0 0 24 24"><path d="M8 7h11M8 12h11M8 17h11M4.5 7h.01M4.5 12h.01M4.5 17h.01"/></svg>
       一覧
@@ -467,7 +493,7 @@ function load(){
   }));
   return ensureShape({ v:SEED_V, metaV:(typeof META_V!=='undefined'?META_V:0), words, stats:{}, nextId:words.length+1, remind:'20:00', voice:'' });
 }
-function ensureShape(db){ if(!Array.isArray(db.videos)) db.videos=[]; return db; }
+function ensureShape(db){ if(!Array.isArray(db.videos)) db.videos=[]; if(!Array.isArray(db.memos)) db.memos=[]; return db; }
 function save(){ localStorage.setItem('ev_db', JSON.stringify(DB)); }
 
 function stat(){ const k=todayKey(); return DB.stats[k] ||= {opens:0,viewed:0,neu:0}; }
@@ -657,7 +683,7 @@ if('speechSynthesis' in window){
 }
 
 /* ---------------- navigation ---------------- */
-const screens={review:'s-review',video:'s-video',list:'s-list',import:'s-import',stats:'s-stats'};
+const screens={review:'s-review',memo:'s-memo',video:'s-video',list:'s-list',import:'s-import',stats:'s-stats'};
 document.getElementById('nav').addEventListener('click',e=>{
   const b=e.target.closest('button'); if(!b) return;
   const t=b.dataset.t;
@@ -667,6 +693,7 @@ document.getElementById('nav').addEventListener('click',e=>{
   if(t==='review') enterReview();
   if(t==='list'){ renderCatFilters(); renderList(); }
   if(t==='video'){ renderVideos(); renderSugFilters(); renderSuggest(); }
+  if(t==='memo') renderMemos();
   if(t==='stats') renderStats();
 });
 
@@ -881,6 +908,96 @@ function renderHardTop(){
       <span class="hw"><span class="term">${w.word}</span><div class="hj">${w.ja}</div></span>
       <span class="hn">✕${w.miss}</span>
     </div>`).join('');
+}
+
+
+/* ---------------- メモ（街で拾った言葉のストック） ---------------- */
+let memoKind='heard';
+document.querySelectorAll('#memoKind button').forEach(b=>b.onclick=()=>{
+  memoKind=b.dataset.k;
+  document.querySelectorAll('#memoKind button').forEach(x=>x.classList.toggle('active',x===b));
+  document.getElementById('memoInput').placeholder = memoKind==='heard'
+    ? '聞こえた英語をそのまま（うろ覚えでもOK）'
+    : '言いたかったことを日本語で';
+});
+document.getElementById('btnMemoAdd').onclick=()=>{
+  const el=document.getElementById('memoInput');
+  const lines=el.value.split('\n').map(t=>t.trim()).filter(Boolean);
+  if(!lines.length){ toast('メモが空です'); return; }
+  lines.forEach(t=>DB.memos.unshift({id:Date.now()+Math.random(),text:t,kind:memoKind,at:todayKey(),done:false}));
+  el.value=''; save(); renderMemos();
+  toast(`${lines.length}件メモしました`);
+};
+
+function renderMemos(){
+  const box=document.getElementById('memoBody');
+  if(!box) return;
+  const list=DB.memos||[];
+  const open=list.filter(m=>!m.done).length;
+  document.getElementById('memoCount').textContent =
+    list.length ? `未処理 ${open} 件 ／ 全 ${list.length} 件` : '';
+  if(!list.length){
+    box.innerHTML='<p class="note">まだメモがありません。<br>聞き取れなかった英語や、言えなかった日本語をその場で書き留めておき、あとで単語に変換できます。</p>';
+    return;
+  }
+  box.innerHTML=list.map(m=>`<div class="mrow ${m.done?'done':''}" data-id="${m.id}">
+      <div class="mbody">
+        <div class="mt">${m.text}</div>
+        <div class="ma">${m.kind==='heard'?'聞いた':'言えなかった'} ・ ${m.at}${m.done?' ・ 単語化済み':''}</div>
+      </div>
+      <div class="mops">
+        ${m.done?'':`<button class="rowbtn conv" data-conv="${m.id}">単語に</button>`}
+        <button class="rowbtn del" data-del="${m.id}">削除</button>
+      </div>
+    </div>`).join('');
+  box.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{
+    const i=DB.memos.findIndex(m=>String(m.id)===b.dataset.del);
+    if(i>=0 && confirm(`削除しますか？\n${DB.memos[i].text}`)){ DB.memos.splice(i,1); save(); renderMemos(); }
+  });
+  box.querySelectorAll('[data-conv]').forEach(b=>b.onclick=()=>convertMemo(b.dataset.conv,b));
+}
+
+async function convertMemo(id, btn){
+  const m=(DB.memos||[]).find(x=>String(x.id)===id);
+  if(!m) return;
+  btn.disabled=true; btn.textContent='変換中';
+  try{
+    let word, ja;
+    if(m.kind==='heard'){
+      word=m.text;
+      ja=await translateOne(m.text) || '';
+    }else{
+      // 言えなかった日本語 → 英語（機械翻訳は不得手なので候補として提示し、その場で直せる）
+      word=await translateJaToEn(m.text) || '';
+      ja=m.text;
+    }
+    const w=prompt('英語（必要なら直してください）', word);
+    if(w===null){ btn.disabled=false; btn.textContent='単語に'; return; }
+    const j=prompt('意味（必要なら直してください）', ja);
+    if(j===null){ btn.disabled=false; btn.textContent='単語に'; return; }
+    const term=(w||'').trim();
+    if(!term){ toast('英語が空です'); btn.disabled=false; btn.textContent='単語に'; return; }
+    if(DB.words.some(x=>x.word.toLowerCase()===term.toLowerCase())){
+      toast('すでに登録済みの単語です');
+    }else{
+      DB.words.push({id:DB.nextId++,word:term,ja:(j||'').trim(),ex:'',exJa:'',
+        cat:'メモから',done:false,miss:0,edited:true});
+      toast('単語に追加しました');
+    }
+    m.done=true; save(); renderMemos();
+  }catch(e){
+    toast('変換に失敗しました'); btn.disabled=false; btn.textContent='単語に';
+  }
+}
+
+async function translateJaToEn(text){
+  const url='https://api.mymemory.translated.net/get?langpair=ja%7Cen&q='+encodeURIComponent(text);
+  try{
+    const r=await fetch(url); const d=await r.json();
+    let t=(d&&d.responseData&&d.responseData.translatedText)||'';
+    if(t && t.toLowerCase()!==text.toLowerCase()) return t;
+  }catch{}
+  return '';
 }
 
 /* ---------------- list ---------------- */
