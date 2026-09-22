@@ -494,22 +494,22 @@ function mergeMeta(db){
 /* 新しい初期単語だけを既存データへ追加する（進捗・編集内容は変更しない） */
 function mergeSeedAdditions(db){
   if(typeof SEED_WORDS==='undefined') return db;
-  if(db.seedAdditionsV===SEED_ADDITIONS_V) return db;
   const seedByWord=new Map(SEED_WORDS.map(w=>[(w.word||'').toLowerCase(),w]));
   const existing=new Set(db.words.map(w=>(w.word||'').toLowerCase()));
+  const missing=SEED_ADDITIONS.filter(term=>!existing.has(term.toLowerCase()));
+  if(db.seedAdditionsV===SEED_ADDITIONS_V && missing.length===0) return db;
   let next=Math.max(Number.isInteger(db.nextId)?db.nextId:0,
     ...db.words.map(w=>(Number.isInteger(w.id)?w.id:0)+1));
-  let added=0;
-  SEED_ADDITIONS.forEach(term=>{
+  let added=0, unresolved=0;
+  missing.forEach(term=>{
     const key=term.toLowerCase();
-    if(existing.has(key)) return;
-    const s=seedByWord.get(key); if(!s) return;
+    const s=seedByWord.get(key); if(!s){ unresolved++; return; }
     db.words.push({id:next++,word:s.word,ja:s.ja||'',ex:s.ex||'',exJa:s.exJa||'',
       cat:s.cat||'未分類',done:false,miss:0});
     existing.add(key); added++;
   });
   db.nextId=next;
-  db.seedAdditionsV=SEED_ADDITIONS_V;
+  if(unresolved===0) db.seedAdditionsV=SEED_ADDITIONS_V;
   localStorage.setItem('ev_db', JSON.stringify(db));
   if(added) setTimeout(()=>toast(`${added}件の新しい単語を追加しました`),800);
   return db;
