@@ -119,13 +119,14 @@
   .row .body{flex:1;min-width:0;}
   .row .h{display:block;font-size:17px;line-height:1.35;word-break:break-word;}
   .row .e{display:block;font-size:13px;color:var(--muted);margin-top:3px;line-height:1.45;}
+  .row .added{display:block;font-size:10px;color:var(--faint);letter-spacing:.06em;margin-top:4px;}
   .row .miss{font-size:11px;color:#B0705E;letter-spacing:.04em;flex:none;margin-top:5px;}
   .rowbtn{flex:none;border:1px solid var(--hair);background:var(--surface);color:var(--muted);
     border-radius:999px;font-size:11px;padding:5px 9px;cursor:pointer;font-family:inherit;
     letter-spacing:.04em;margin-top:2px;}
   .rowbtn.mark{min-width:52px;}
   .rowbtn.mark.on{background:var(--known);border-color:var(--known);color:#fff;}
-  .row.done .h,.row.done .e{opacity:.4;}
+  .row.done .h,.row.done .e,.row.done .added{opacity:.4;}
 
   /* ---------- quick add ---------- */
   .qrow{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--hair);}
@@ -479,10 +480,13 @@ function mergeMeta(db){
   SEED_WORDS.forEach(s=>byWord.set((s.word||'').toLowerCase(), s));
   let n=0;
   db.words.forEach(w=>{
-    if(w.done) return;      // 習得済みは触らない
-    if(w.edited) return;    // 自分で直したものは触らない
     const s=byWord.get((w.word||'').toLowerCase());
     if(!s) return;
+    if(typeof w.initialSetup!=='boolean' && typeof s.initialSetup==='boolean') w.initialSetup=s.initialSetup;
+    if(typeof w.addedAt==='undefined') w.addedAt=s.addedAt||null;
+    if(!w.source && s.source) w.source=s.source;
+    if(w.done) return;      // 習得済みの意味・カテゴリは触らない
+    if(w.edited) return;    // 自分で直した意味・カテゴリは触らない
     if(s.ja && s.ja!==w.ja){ w.ja=s.ja; n++; }
     if(s.cat && s.cat!==w.cat){ w.cat=s.cat; }
   });
@@ -505,7 +509,8 @@ function mergeSeedAdditions(db){
     const key=term.toLowerCase();
     const s=seedByWord.get(key); if(!s){ unresolved++; return; }
     db.words.push({id:next++,word:s.word,ja:s.ja||'',ex:s.ex||'',exJa:s.exJa||'',
-      cat:s.cat||'未分類',done:false,miss:0});
+      cat:s.cat||'未分類',done:false,miss:0,initialSetup:!!s.initialSetup,
+      addedAt:s.addedAt||null,source:s.source||''});
     existing.add(key); added++;
   });
   db.nextId=next;
@@ -521,7 +526,8 @@ function load(){
   const words = src.map((w,i)=>({
     id:i+1, word:w.word, ja:w.ja||'',
     ex:w.ex||'', exJa:w.exJa||'',
-    cat:w.cat||'未分類', done:!!w.done, miss:w.miss||0
+    cat:w.cat||'未分類', done:!!w.done, miss:w.miss||0,
+    initialSetup:!!w.initialSetup, addedAt:w.addedAt||null, source:w.source||''
   }));
   return ensureShape({ v:SEED_V, metaV:(typeof META_V!=='undefined'?META_V:0), seedAdditionsV:SEED_ADDITIONS_V, words, stats:{}, nextId:words.length+1, remind:'20:00', voice:'' });
 }
@@ -909,7 +915,7 @@ document.getElementById('btnQuickSave').onclick=()=>{
   const ready=quickRows.filter(r=>r.word.trim());
   if(!ready.length) return;
   ready.forEach(r=>DB.words.push({id:DB.nextId++,word:r.word.trim(),ja:(r.ja||'').trim(),
-    ex:'',exJa:'',cat,done:false,miss:0}));
+    ex:'',exJa:'',cat,done:false,miss:0,initialSetup:false,addedAt:todayKey(),source:'アプリ一括追加'}));
   save();
   const res=document.getElementById('quickResult');
   res.className='result show';
@@ -1013,7 +1019,8 @@ async function convertMemo(id, btn){
       toast('すでに登録済みの単語です');
     }else{
       DB.words.push({id:DB.nextId++,word:term,ja:(j||'').trim(),ex:'',exJa:'',
-        cat:'メモから',done:false,miss:0,edited:true});
+        cat:'メモから',done:false,miss:0,edited:true,initialSetup:false,
+        addedAt:todayKey(),source:'メモから'});
       toast('単語に追加しました');
     }
     m.done=true; save(); renderMemos();
@@ -1061,9 +1068,10 @@ function renderList(){
   const doneAll=DB.words.filter(w=>w.done).length;
   document.getElementById('listCount').textContent=
     `表示 ${shown} 語 ／ 全 ${DB.words.length} 語（習得 ${doneAll}）`;
+  const addedLabel=w=>w.initialSetup?'初期セットアップ':(w.addedAt?`追加 ${w.addedAt}`:'追加日不明');
   const rowHtml=w=>`<div class="row ${w.done?'done':''}" data-id="${w.id}">
         <span class="dot"></span>
-        <span class="body"><span class="h term">${w.word}</span><span class="e">${w.ja}</span></span>
+        <span class="body"><span class="h term">${w.word}</span><span class="e">${w.ja}</span><span class="added">${addedLabel(w)}</span></span>
         ${(w.miss>0)?`<span class="miss">✕${w.miss}</span>`:''}
         <button class="rowbtn edit" data-edit="${w.id}" title="意味を編集">訳</button>
         <button class="rowbtn mark ${w.done?'on':''}" data-mark="${w.id}">${w.done?'覚えた':'まだ'}</button>
@@ -1306,7 +1314,8 @@ document.getElementById('btnImport').onclick=()=>{
     if(!term) return;
     if(existing.has(term.toLowerCase())){ skipped++; return; }
     existing.add(term.toLowerCase());
-    DB.words.push({id:DB.nextId++,word:term,ja:it.ja||'',ex:it.ex||'',exJa:it.exJa||'',cat,done:false,miss:0});
+    DB.words.push({id:DB.nextId++,word:term,ja:it.ja||'',ex:it.ex||'',exJa:it.exJa||'',
+      cat,done:false,miss:0,initialSetup:false,addedAt:todayKey(),source:'JSON取込'});
     added++;
   });
   save();
