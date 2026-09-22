@@ -439,6 +439,15 @@ const PROMPT = `このスクリーンショットに写っている英単語・�
 const todayKey = () => new Date().toISOString().slice(0,10);
 
 const SEED_V = 1;
+const SEED_ADDITIONS_V = 1;
+const SEED_ADDITIONS = [
+  'palm-fringed','hawk','more often than not','collateral','conjured','wearing',
+  'forensic','magistrate','foreword','anomalies','concisely','unwavering','instilled',
+  'boundless','supremacy','bleak view','glimmer','conforms','consociational','contended',
+  'communalism','dictate','tenure','enshrined','in retrospect','in favour','culminating',
+  'materialised','prudent','imminent','refine','exacerbate','entrenched','stratification',
+  'resentment','veto'
+];
 const FALLBACK_WORDS=[
   {word:'salient',ja:'顕著な、目立つ',ex:'The most salient point was cost.',exJa:'最も重要な点はコストだった。',cat:'学術系'},
   {word:'fair shake',ja:'公平な扱い',ex:'Everyone deserves a fair shake.',exJa:'誰もが公平に扱われるべきだ。',cat:'日常会話'},
@@ -482,16 +491,39 @@ function mergeMeta(db){
   if(n) setTimeout(()=>toast(`${n}件の意味を更新しました`),800);
   return db;
 }
+/* 新しい初期単語だけを既存データへ追加する（進捗・編集内容は変更しない） */
+function mergeSeedAdditions(db){
+  if(typeof SEED_WORDS==='undefined') return db;
+  if(db.seedAdditionsV===SEED_ADDITIONS_V) return db;
+  const seedByWord=new Map(SEED_WORDS.map(w=>[(w.word||'').toLowerCase(),w]));
+  const existing=new Set(db.words.map(w=>(w.word||'').toLowerCase()));
+  let next=Math.max(Number.isInteger(db.nextId)?db.nextId:0,
+    ...db.words.map(w=>(Number.isInteger(w.id)?w.id:0)+1));
+  let added=0;
+  SEED_ADDITIONS.forEach(term=>{
+    const key=term.toLowerCase();
+    if(existing.has(key)) return;
+    const s=seedByWord.get(key); if(!s) return;
+    db.words.push({id:next++,word:s.word,ja:s.ja||'',ex:s.ex||'',exJa:s.exJa||'',
+      cat:s.cat||'未分類',done:false,miss:0});
+    existing.add(key); added++;
+  });
+  db.nextId=next;
+  db.seedAdditionsV=SEED_ADDITIONS_V;
+  localStorage.setItem('ev_db', JSON.stringify(db));
+  if(added) setTimeout(()=>toast(`${added}件の新しい単語を追加しました`),800);
+  return db;
+}
 function load(){
   const raw = localStorage.getItem('ev_db');
-  if(raw){ try{ const p = JSON.parse(raw); if(p.v === SEED_V) return ensureShape(mergeMeta(mergeExamples(p))); }catch{} }
+  if(raw){ try{ const p = JSON.parse(raw); if(p.v === SEED_V) return ensureShape(mergeSeedAdditions(mergeMeta(mergeExamples(ensureShape(p))))); }catch{} }
   const src = (typeof SEED_WORDS!=='undefined' && SEED_WORDS.length) ? SEED_WORDS : FALLBACK_WORDS;
   const words = src.map((w,i)=>({
     id:i+1, word:w.word, ja:w.ja||'',
     ex:w.ex||'', exJa:w.exJa||'',
     cat:w.cat||'未分類', done:!!w.done, miss:w.miss||0
   }));
-  return ensureShape({ v:SEED_V, metaV:(typeof META_V!=='undefined'?META_V:0), words, stats:{}, nextId:words.length+1, remind:'20:00', voice:'' });
+  return ensureShape({ v:SEED_V, metaV:(typeof META_V!=='undefined'?META_V:0), seedAdditionsV:SEED_ADDITIONS_V, words, stats:{}, nextId:words.length+1, remind:'20:00', voice:'' });
 }
 function ensureShape(db){ if(!Array.isArray(db.videos)) db.videos=[]; if(!Array.isArray(db.memos)) db.memos=[]; return db; }
 function save(){ localStorage.setItem('ev_db', JSON.stringify(DB)); }
