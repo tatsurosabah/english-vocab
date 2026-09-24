@@ -169,6 +169,43 @@
     padding:13px 15px;margin-top:16px;line-height:1.6;display:none;}
   .result.show{display:block;}
 
+  /* ---------- transcript reader ---------- */
+  .tr-box{padding-bottom:34px;margin-bottom:38px;border-bottom:1px solid var(--hair);}
+  .tr-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .tr-grid .wide{grid-column:1/-1;}
+  .tr-reader{max-height:46vh;overflow-y:auto;background:var(--surface);border:1px solid var(--hair);
+    border-radius:16px;padding:10px 15px;margin:0 0 14px;line-height:1.75;-webkit-user-select:text;
+    user-select:text;white-space:normal;}
+  .tr-seg{padding:8px 0;border-bottom:1px solid var(--hair);font-size:15px;}
+  .tr-seg:last-child{border-bottom:0;}
+  .tr-time{display:inline-block;min-width:46px;margin-right:8px;color:var(--faint);font-size:11px;
+    font-variant-numeric:tabular-nums;vertical-align:2px;}
+  .tr-pick{background:var(--accent-soft);border-radius:16px;padding:14px;margin-bottom:18px;}
+  .tr-pick input.text{margin-bottom:10px;background:var(--surface);}
+  .tr-pick .tr-at{max-width:120px;}
+  .tr-actions{display:flex;gap:10px;margin-bottom:12px;}
+  .tr-actions .btn{flex:1;padding:13px 10px;font-size:13px;}
+  .tr-actions .btn.ghost{margin-bottom:0;}
+  .tr-candidate{background:var(--surface);border:1px solid var(--hair);border-radius:15px;
+    padding:12px;margin:10px 0;}
+  .tr-candidate.duplicate{opacity:.62;}
+  .tr-candidate-head{display:flex;align-items:center;gap:9px;margin-bottom:9px;}
+  .tr-candidate-head input[type=checkbox]{width:19px;height:19px;accent-color:var(--accent);flex:none;}
+  .tr-candidate-head .term{flex:1;min-width:0;font-size:16px;word-break:break-word;cursor:pointer;}
+  .tr-candidate-head .badge{flex:none;}
+  .tr-candidate-fields{display:grid;grid-template-columns:1fr 92px;gap:8px;}
+  .tr-candidate-fields input{width:100%;background:var(--paper);border:1px solid var(--hair);
+    border-radius:9px;padding:9px 10px;color:var(--ink);font:inherit;outline:none;}
+  .tr-candidate-fields input:first-child{grid-column:1/-1;font-family:"Iowan Old Style",Palatino,Georgia,serif;}
+  .tr-candidate-fields input:focus{border-color:var(--accent);}
+  .tr-mini{border:0;background:none;color:var(--muted);padding:6px 4px;font:inherit;font-size:12px;cursor:pointer;}
+  .tr-mini.del{color:#B0705E;}
+  .tr-empty{font-size:13px;color:var(--muted);line-height:1.7;padding:10px 2px;}
+  @media(max-width:420px){
+    .tr-grid{grid-template-columns:1fr;}
+    .tr-grid .wide{grid-column:auto;}
+  }
+
   /* ---------- stats ---------- */
   .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-bottom:30px;}
   h2.subtitle{font-size:12px;font-weight:500;letter-spacing:.14em;color:var(--muted);
@@ -321,6 +358,62 @@
 
   <!-- ===== 取込 ===== -->
   <section class="screen" id="s-import">
+    <div class="tr-box">
+      <h1 class="title">Transcriptから追加</h1>
+      <p class="note">SpotifyやYouTubeの文字起こしを貼り、読みながら難しい語句を選べます。全文はこの端末の下書きだけに保存され、単語帳やバックアップには入りません。</p>
+      <div class="filters" id="trSourceType">
+        <button data-type="spotify" class="active">Spotify</button>
+        <button data-type="youtube">YouTube</button>
+        <button data-type="other">その他</button>
+      </div>
+      <div class="tr-grid">
+        <div class="wide">
+          <label class="fld" for="trTitle">タイトル／出典</label>
+          <input class="text" id="trTitle" placeholder="例：Sabah For Sabahans: Understanding MA63..." autocapitalize="off">
+        </div>
+        <div class="wide">
+          <label class="fld" for="trUrl">元のURL</label>
+          <input class="text" id="trUrl" type="url" placeholder="Spotify / YouTube / PodcastのURL" autocapitalize="off" spellcheck="false">
+        </div>
+        <div>
+          <label class="fld" for="trCategory">カテゴリ</label>
+          <input class="text" id="trCategory" value="政治・行政" autocapitalize="off">
+        </div>
+      </div>
+      <label class="fld" for="trText">Transcript（通常の文章／SRT／VTT）</label>
+      <textarea id="trText" placeholder="文字起こしをここに貼り付けます。SRTやVTTなら時刻も引き継ぎます。" autocapitalize="off" spellcheck="false"></textarea>
+      <div class="tr-actions">
+        <button class="btn solid" id="btnTrRead">読みながら選ぶ</button>
+        <button class="btn ghost" id="btnTrClear">下書きを消す</button>
+      </div>
+      <div class="result" id="trResult"></div>
+
+      <div id="trWorkspace" style="display:none;">
+        <div class="qhead">Transcriptを読む</div>
+        <p class="note">難しい語句を長押しして選択し、「選択を候補に追加」を押してください。選択しにくい場合は下の欄へ直接入力できます。</p>
+        <div class="tr-reader" id="trReader" tabindex="0"></div>
+        <div class="tr-pick">
+          <label class="fld" for="trPickWord">選択した語句</label>
+          <input class="text" id="trPickWord" placeholder="語句を選択、または入力" autocapitalize="off" spellcheck="false">
+          <input class="text tr-at" id="trPickAt" placeholder="時刻 12:34" autocapitalize="off" spellcheck="false">
+          <button class="btn solid" id="btnTrAdd">選択を候補に追加</button>
+        </div>
+
+        <div class="tr-actions">
+          <button class="btn ghost" id="btnTrPreset">2本目の候補36件</button>
+          <button class="btn ghost" id="btnTrPrompt">ChatGPTで候補抽出</button>
+        </div>
+        <label class="fld" for="trJson">候補JSON（任意）</label>
+        <textarea id="trJson" placeholder='[{"word":"federalism","ja":"連邦主義","at":"12:34"}]' autocapitalize="off" spellcheck="false" style="min-height:92px;"></textarea>
+        <button class="btn ghost" id="btnTrJson">候補JSONを読み込む</button>
+
+        <div class="qhead">追加候補</div>
+        <div class="count" id="trCount"></div>
+        <div id="trCandidates"></div>
+        <button class="btn solid" id="btnTrSave" style="display:none;">選んだ候補を単語帳に追加</button>
+      </div>
+    </div>
+
     <h1 class="title">かんたん追加</h1>
     <label class="fld">英語（1行に1つ）</label>
     <textarea id="quickInput" placeholder="i will not desert you&#10;take no prisoners&#10;win you over" autocapitalize="off" spellcheck="false"></textarea>
@@ -432,12 +525,16 @@
 <script src="data.js"></script>
 <script src="suggest.js"></script>
 <script src="audio.js"></script>
+<script src="transcript_presets.js"></script>
 <script>
 const PROMPT = `このスクリーンショットに写っている英単語・英語表現をすべて抽出し、JSON配列だけを出力してください。各要素の形式：
 {"word":"英単語または表現","ja":"簡潔な日本語の意味","ex":"その語を使った短い英語の例文","exJa":"例文の日本語訳"}
 重複は除く。例文は短く（12語程度まで）。説明や前置きは不要。配列のみ。`;
 
-const todayKey = () => new Date().toISOString().slice(0,10);
+const dateKey = d => {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+};
+const todayKey = () => dateKey(new Date());
 
 const SEED_V = 1;
 const SEED_ADDITIONS_V = 1;
@@ -613,7 +710,7 @@ function weekMs(){
   let t=0; const now=new Date();
   for(let i=0;i<7;i++){
     const d=new Date(now); d.setDate(now.getDate()-i);
-    const k=d.toISOString().slice(0,10);
+    const k=dateKey(d);
     t+=(DB.stats[k]&&DB.stats[k].ms)||0;
   }
   return t+(sesStart?Date.now()-sesStart:0);
@@ -628,7 +725,7 @@ function toast(msg){
 /* ---------------- audio ---------------- */
 let curAudio=null;
 const SPK_SVG='<svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 9a3.5 3.5 0 0 1 0 6"/><path d="M19 6a7 7 0 0 1 0 12"/></svg>';
-function spkBtn(text){ return `<button class="spk" data-say="${String(text).replace(/"/g,'&quot;')}">${SPK_SVG}</button>`; }
+function spkBtn(text){ return `<button class="spk" data-say="${trEsc(text)}">${SPK_SVG}</button>`; }
 function md5(s){/*小さなMD5実装*/
   function L(k,d){return(k<<d)|(k>>>(32-d));}
   function K(G,k){var I,d,F,H,x;F=(G&2147483648);H=(k&2147483648);I=(G&1073741824);d=(k&1073741824);x=(G&1073741823)+(k&1073741823);
@@ -752,7 +849,7 @@ function renderRevCats(){
   if(revCat!=='all' && !cats.includes(revCat)) revCat='all';
   const n=c=>DB.words.filter(w=>!w.done && w.cat===c).length;
   box.innerHTML=`<button data-c="all" class="${revCat==='all'?'active':''}">すべて</button>`+
-    cats.map(c=>`<button data-c="${c}" class="${revCat===c?'active':''}">${c} ${n(c)}</button>`).join('');
+    cats.map(c=>`<button data-c="${trEsc(c)}" class="${revCat===c?'active':''}">${trEsc(c)} ${n(c)}</button>`).join('');
   box.querySelectorAll('button').forEach(b=>b.onclick=()=>{
     revCat=b.dataset.c;
     renderRevCats();
@@ -790,13 +887,13 @@ function nextCard(){
   const n=(current.word||'').length;
   const sz = n>44?'xl' : n>26?'l' : n>14?'m' : '';
   stage.innerHTML=`<div class="card" id="card">
-      <div class="word term ${sz}">${current.word}</div>
+      <div class="word term ${sz}">${trEsc(current.word)}</div>
       <div class="word-spk">${spkBtn(current.word)}</div>
       <div class="reveal">
         <div class="rule"></div>
-        <div class="ja">${current.ja}</div>
-        ${current.ex?`<div class="ex-line"><span class="ex">${current.ex}</span>${spkBtn(current.ex)}</div>`:''}
-        ${current.exJa?`<div class="exja">${current.exJa}</div>`:''}
+        <div class="ja">${trEsc(current.ja)}</div>
+        ${current.ex?`<div class="ex-line"><span class="ex">${trEsc(current.ex)}</span>${spkBtn(current.ex)}</div>`:''}
+        ${current.exJa?`<div class="exja">${trEsc(current.exJa)}</div>`:''}
       </div>
       <div class="hint" id="hint">タップで意味</div>
     </div>`;
@@ -853,6 +950,257 @@ function attachSwipe(card){
 }
 function fly(card,dir){ card.style.transition='transform .25s,opacity .25s';
   card.style.transform=`translateX(${dir*500}px) rotate(${dir*18}deg)`;card.style.opacity=0; }
+
+/* ---------------- Transcriptを読みながら単語追加 ---------------- */
+const TR_DRAFT_KEY='ev_transcript_draft_v1';
+let trType='spotify', trSegments=[], trCandidates=[];
+const trEsc=s=>String(s??'').replace(/[&<>"']/g,c=>({
+  '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+}[c]));
+function trShow(msg){
+  const el=document.getElementById('trResult');
+  el.className='result show'; el.textContent=msg;
+}
+function trDraftData(){
+  return {
+    type:trType,title:document.getElementById('trTitle').value,
+    url:document.getElementById('trUrl').value,
+    category:document.getElementById('trCategory').value,
+    transcript:document.getElementById('trText').value,
+    candidates:trCandidates
+  };
+}
+let trDraftTimer=0;
+function saveTrDraft(){
+  clearTimeout(trDraftTimer);
+  trDraftTimer=setTimeout(()=>{
+    try{ localStorage.setItem(TR_DRAFT_KEY,JSON.stringify(trDraftData())); }
+    catch{ trShow('下書きを保存できませんでした。文字起こしが長すぎる可能性があります。'); }
+  },250);
+}
+function setTrType(type,persist=true){
+  trType=['spotify','youtube','other'].includes(type)?type:'other';
+  document.querySelectorAll('#trSourceType button').forEach(b=>b.classList.toggle('active',b.dataset.type===trType));
+  if(persist) saveTrDraft();
+}
+document.querySelectorAll('#trSourceType button').forEach(b=>b.onclick=()=>setTrType(b.dataset.type));
+['trTitle','trUrl','trCategory','trText'].forEach(id=>
+  document.getElementById(id).addEventListener('input',saveTrDraft));
+
+function parseTranscript(raw){
+  const src=String(raw||'').replace(/\r/g,'').trim();
+  if(!src) return [];
+  const clean=s=>s.replace(/<[^>]*>/g,'').replace(/\s+/g,' ').trim();
+  const out=[];
+  if(src.includes('-->')){
+    src.replace(/^WEBVTT[^\n]*\n?/i,'').split(/\n{2,}/).forEach(block=>{
+      const lines=block.split('\n').map(s=>s.trim()).filter(Boolean);
+      const ti=lines.findIndex(s=>s.includes('-->'));
+      if(ti<0) return;
+      const at=(lines[ti].match(/(?:\d{2}:)?\d{2}:\d{2}(?:[.,]\d{3})?/)||[''])[0]
+        .replace(/^[0:]*(?=\d{1,2}:\d{2})/,'').replace(/[.,]\d{3}$/,'');
+      const text=clean(lines.slice(ti+1).join(' '));
+      if(text) out.push({at,text});
+    });
+    if(out.length) return out;
+  }
+  let pending='';
+  src.split('\n').map(s=>s.trim()).filter(Boolean).forEach(line=>{
+    const only=line.match(/^\[?((?:\d{1,2}:)?\d{1,2}:\d{2})\]?$/);
+    if(only){ pending=only[1]; return; }
+    const lead=line.match(/^\[?((?:\d{1,2}:)?\d{1,2}:\d{2})\]?\s*[-–—:]?\s+(.+)$/);
+    if(lead){ out.push({at:lead[1],text:clean(lead[2])}); pending=''; return; }
+    const text=clean(line);
+    if(text){ out.push({at:pending,text}); pending=''; }
+  });
+  if(out.length===1 && out[0].text.length>500){
+    const at=out[0].at;
+    return out[0].text.split(/(?<=[.!?])\s+(?=[A-Z“"'])/).filter(Boolean).map(text=>({at,text}));
+  }
+  return out;
+}
+function renderTrTranscript(){
+  const raw=document.getElementById('trText').value;
+  trSegments=parseTranscript(raw);
+  if(!trSegments.length){ trShow('文字起こしを貼り付けてください。'); return false; }
+  const reader=document.getElementById('trReader');
+  reader.innerHTML=trSegments.map((s,i)=>`<div class="tr-seg" data-i="${i}" data-at="${trEsc(s.at)}">`
+    +`${s.at?`<span class="tr-time">${trEsc(s.at)}</span>`:''}<span>${trEsc(s.text)}</span></div>`).join('');
+  document.getElementById('trWorkspace').style.display='';
+  renderTrCandidates();
+  trShow(`${trSegments.length}区間を読み込んで、この端末に下書き保存しました。`);
+  saveTrDraft();
+  return true;
+}
+document.getElementById('btnTrRead').onclick=()=>renderTrTranscript();
+
+function captureTrSelection(){
+  const reader=document.getElementById('trReader');
+  const sel=window.getSelection();
+  if(!sel||sel.isCollapsed||!sel.rangeCount) return;
+  const node=sel.anchorNode;
+  if(!node||!reader.contains(node)) return;
+  const text=sel.toString().replace(/\s+/g,' ').trim();
+  if(!text) return;
+  const el=(node.nodeType===1?node:node.parentElement).closest('.tr-seg');
+  document.getElementById('trPickWord').value=text;
+  document.getElementById('trPickAt').value=el?.dataset.at||'';
+}
+document.getElementById('trReader').addEventListener('mouseup',captureTrSelection);
+document.getElementById('trReader').addEventListener('touchend',()=>setTimeout(captureTrSelection,80));
+
+function trHasWord(word){
+  const key=String(word||'').trim().toLowerCase();
+  return DB.words.some(w=>(w.word||'').trim().toLowerCase()===key);
+}
+function addTrCandidate(item){
+  const word=String(item?.word||item?.en||'').replace(/\s+/g,' ').trim();
+  if(!word) return false;
+  if(trCandidates.some(c=>(c.word||'').toLowerCase()===word.toLowerCase())) return false;
+  trCandidates.push({word,ja:String(item?.ja||'').trim(),at:String(item?.at||item?.timestamp||'').trim(),selected:true});
+  return true;
+}
+document.getElementById('btnTrAdd').onclick=async()=>{
+  const word=document.getElementById('trPickWord').value.replace(/\s+/g,' ').trim();
+  const at=document.getElementById('trPickAt').value.trim();
+  if(!word){ toast('語句を選択または入力してください'); return; }
+  if(trCandidates.some(c=>c.word.toLowerCase()===word.toLowerCase())){ toast('候補に追加済みです'); return; }
+  const btn=document.getElementById('btnTrAdd');
+  btn.disabled=true; btn.textContent='日本語訳を取得中…';
+  const ja=await translateOne(word);
+  addTrCandidate({word,ja,at});
+  btn.disabled=false; btn.textContent='選択を候補に追加';
+  document.getElementById('trPickWord').value='';
+  document.getElementById('trPickAt').value='';
+  renderTrCandidates(); saveTrDraft();
+};
+function renderTrCandidates(){
+  const box=document.getElementById('trCandidates');
+  const count=document.getElementById('trCount');
+  const saveBtn=document.getElementById('btnTrSave');
+  if(!trCandidates.length){
+    box.innerHTML='<div class="tr-empty">まだ候補はありません。Transcriptから選択するか、候補JSONを読み込んでください。</div>';
+    count.textContent=''; saveBtn.style.display='none'; return;
+  }
+  const dups=trCandidates.filter(c=>trHasWord(c.word)).length;
+  const selected=trCandidates.filter(c=>c.selected&&!trHasWord(c.word)).length;
+  count.textContent=`候補 ${trCandidates.length}件 ／ 追加対象 ${selected}件${dups?` ／ 登録済み ${dups}件`:''}`;
+  box.innerHTML=trCandidates.map((c,i)=>{
+    const dup=trHasWord(c.word);
+    return `<div class="tr-candidate ${dup?'duplicate':''}" data-i="${i}">
+      <div class="tr-candidate-head">
+        <input type="checkbox" data-select="${i}" ${c.selected&&!dup?'checked':''} ${dup?'disabled':''} aria-label="追加対象">
+        <span class="term" data-tr-say="${i}" role="button" tabindex="0">${trEsc(c.word)}</span>
+        ${dup?'<span class="badge">登録済み</span>':''}
+        <button class="spk" data-tr-say="${i}" aria-label="英語を再生">${SPK_SVG}</button>
+      </div>
+      <div class="tr-candidate-fields">
+        <input data-field="word" data-i="${i}" value="${trEsc(c.word)}" placeholder="英語">
+        <input data-field="ja" data-i="${i}" value="${trEsc(c.ja)}" placeholder="日本語訳">
+        <input data-field="at" data-i="${i}" value="${trEsc(c.at)}" placeholder="時刻">
+      </div>
+      <button class="tr-mini" data-translate="${i}">訳を取得</button>
+      <button class="tr-mini del" data-tr-del="${i}">候補から削除</button>
+    </div>`;
+  }).join('');
+  saveBtn.style.display='';
+  box.querySelectorAll('[data-select]').forEach(el=>el.onchange=()=>{
+    trCandidates[+el.dataset.select].selected=el.checked; renderTrCandidates(); saveTrDraft();
+  });
+  box.querySelectorAll('[data-field]').forEach(el=>{
+    el.oninput=()=>{ trCandidates[+el.dataset.i][el.dataset.field]=el.value; saveTrDraft(); };
+    el.onchange=()=>renderTrCandidates();
+  });
+  box.querySelectorAll('[data-tr-say]').forEach(b=>{
+    const play=()=>speak(trCandidates[+b.dataset.trSay].word);
+    b.onclick=play;
+    b.onkeydown=ev=>{ if(ev.key==='Enter'||ev.key===' '){ ev.preventDefault(); play(); } };
+  });
+  box.querySelectorAll('[data-tr-del]').forEach(b=>b.onclick=()=>{
+    trCandidates.splice(+b.dataset.trDel,1); renderTrCandidates(); saveTrDraft();
+  });
+  box.querySelectorAll('[data-translate]').forEach(b=>b.onclick=async()=>{
+    const i=+b.dataset.translate; b.disabled=true; b.textContent='翻訳中…';
+    trCandidates[i].ja=await translateOne(trCandidates[i].word);
+    renderTrCandidates(); saveTrDraft();
+  });
+}
+
+document.getElementById('btnTrPreset').onclick=()=>{
+  const preset=(typeof TRANSCRIPT_PRESETS!=='undefined'&&TRANSCRIPT_PRESETS[0]);
+  if(!preset){ toast('候補データを読み込めませんでした'); return; }
+  document.getElementById('trTitle').value=preset.title;
+  document.getElementById('trUrl').value=preset.url;
+  document.getElementById('trCategory').value=preset.category;
+  setTrType(preset.type);
+  let added=0; preset.candidates.forEach(c=>{ if(addTrCandidate(c)) added++; });
+  renderTrCandidates(); saveTrDraft();
+  trShow(`2本目の確認候補を${added}件読み込みました。必要なものだけチェックして追加できます。`);
+};
+document.getElementById('btnTrJson').onclick=()=>{
+  const raw=document.getElementById('trJson').value.trim();
+  if(!raw){ toast('候補JSONを貼り付けてください'); return; }
+  try{
+    const parsed=JSON.parse(raw); const arr=Array.isArray(parsed)?parsed:(parsed.words||parsed.candidates||[]);
+    let added=0; arr.forEach(c=>{ if(addTrCandidate(c)) added++; });
+    renderTrCandidates(); saveTrDraft();
+    document.getElementById('trJson').value='';
+    trShow(`${added}件の候補を読み込みました。`);
+  }catch{ trShow('候補JSONの形式が正しくありません。'); }
+};
+document.getElementById('btnTrPrompt').onclick=async()=>{
+  const text=document.getElementById('trText').value.trim();
+  if(!text){ toast('先にTranscriptを貼り付けてください'); return; }
+  const prompt=`次の英語Transcriptから、英語学習者にとって難しい重要語・句動詞・政治や社会の専門表現を抽出してください。固有名詞と基本語は原則除外し、重複も除いてください。日本語訳と、分かれば元の時刻を付け、JSON配列だけを出力してください。形式: {"word":"英語","ja":"簡潔な日本語訳","at":"12:34"}\n\n${text}`;
+  try{
+    await navigator.clipboard.writeText(prompt);
+    toast('全文と抽出指示をコピーしました');
+    window.open('https://chatgpt.com/','_blank','noopener');
+  }catch{ trShow('コピーできませんでした。ブラウザのクリップボード許可を確認してください。'); }
+};
+document.getElementById('btnTrSave').onclick=()=>{
+  const title=document.getElementById('trTitle').value.trim();
+  const sourceUrl=document.getElementById('trUrl').value.trim();
+  const cat=document.getElementById('trCategory').value.trim()||'Transcript';
+  const ready=trCandidates.filter(c=>c.selected&&c.word.trim()&&!trHasWord(c.word));
+  if(!ready.length){ toast('追加する未登録の候補を選んでください'); return; }
+  ready.forEach(c=>DB.words.push({
+    id:DB.nextId++,word:c.word.trim(),ja:(c.ja||'').trim(),ex:'',exJa:'',cat,
+    done:false,miss:0,initialSetup:false,addedAt:todayKey(),
+    source:title||`${trType} Transcript`,sourceType:trType,sourceUrl,
+    sourceTimestamp:(c.at||'').trim()
+  }));
+  save();
+  const keys=new Set(ready.map(c=>c.word.trim().toLowerCase()));
+  trCandidates=trCandidates.filter(c=>!keys.has(c.word.trim().toLowerCase()));
+  renderTrCandidates(); saveTrDraft(); renderCatFilters();
+  trShow(`${ready.length}件を「${cat}」へ追加しました。出典と時刻も保存しています。`);
+};
+document.getElementById('btnTrClear').onclick=()=>{
+  if(!confirm('この端末のTranscript下書きと候補を消します。単語帳へ追加済みの単語は消えません。')) return;
+  clearTimeout(trDraftTimer);
+  localStorage.removeItem(TR_DRAFT_KEY);
+  trType='spotify'; trSegments=[]; trCandidates=[];
+  ['trTitle','trUrl','trText','trJson','trPickWord','trPickAt'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('trCategory').value='政治・行政';
+  document.getElementById('trWorkspace').style.display='none';
+  document.getElementById('trResult').className='result';
+  setTrType('spotify',false); renderTrCandidates();
+};
+function loadTrDraft(){
+  try{
+    const d=JSON.parse(localStorage.getItem(TR_DRAFT_KEY)||'null');
+    if(!d) return;
+    trType=d.type||'spotify'; trCandidates=Array.isArray(d.candidates)?d.candidates:[];
+    document.getElementById('trTitle').value=d.title||'';
+    document.getElementById('trUrl').value=d.url||'';
+    document.getElementById('trCategory').value=d.category||'政治・行政';
+    document.getElementById('trText').value=d.transcript||'';
+    setTrType(trType);
+    if(d.transcript) renderTrTranscript(); else renderTrCandidates();
+  }catch{ localStorage.removeItem(TR_DRAFT_KEY); }
+}
+loadTrDraft();
 
 /* ---------------- かんたん追加（自動翻訳） ---------------- */
 let quickRows=[];
@@ -943,7 +1291,7 @@ function renderHardTop(){
   }
   box.innerHTML=top.map((w,i)=>`<div class="hrow">
       <span class="rank">${i+1}</span>
-      <span class="hw"><span class="term">${w.word}</span><div class="hj">${w.ja}</div></span>
+      <span class="hw"><span class="term">${trEsc(w.word)}</span><div class="hj">${trEsc(w.ja)}</div></span>
       <span class="hn">✕${w.miss}</span>
     </div>`).join('');
 }
@@ -1052,7 +1400,7 @@ function renderCatFilters(){
   const cats=[...new Set(DB.words.map(w=>w.cat))];
   if(catFilter!=='all' && !cats.includes(catFilter)) catFilter='all';
   box.innerHTML=`<button data-c="all" class="${catFilter==='all'?'active':''}">全カテゴリ</button>`+
-    cats.map(c=>`<button data-c="${c}" class="${catFilter===c?'active':''}">${c}</button>`).join('');
+    cats.map(c=>`<button data-c="${trEsc(c)}" class="${catFilter===c?'active':''}">${trEsc(c)}</button>`).join('');
   box.querySelectorAll('button').forEach(b=>b.onclick=()=>{
     catFilter=b.dataset.c; renderCatFilters(); renderList();
   });
@@ -1071,7 +1419,7 @@ function renderList(){
   const addedLabel=w=>w.initialSetup?'初期セットアップ':(w.addedAt?`追加 ${w.addedAt}`:'追加日不明');
   const rowHtml=w=>`<div class="row ${w.done?'done':''}" data-id="${w.id}">
         <span class="dot"></span>
-        <span class="body"><span class="h term">${w.word}</span><span class="e">${w.ja}</span><span class="added">${addedLabel(w)}</span></span>
+        <span class="body"><span class="h term" data-list-say="${w.id}" role="button" tabindex="0">${trEsc(w.word)}</span><span class="e">${trEsc(w.ja)}</span><span class="added">${trEsc(addedLabel(w))}</span></span>
         ${(w.miss>0)?`<span class="miss">✕${w.miss}</span>`:''}
         <button class="rowbtn edit" data-edit="${w.id}" title="意味を編集">訳</button>
         <button class="rowbtn mark ${w.done?'on':''}" data-mark="${w.id}">${w.done?'覚えた':'まだ'}</button>
@@ -1093,7 +1441,7 @@ function renderList(){
       const done=all.filter(w=>w.done).length;
       return `<div class="cat">
         <div class="cat-head">
-          <span class="name" data-cat="${cat}">${cat}</span>
+          <span class="name" data-cat="${trEsc(cat)}">${trEsc(cat)}</span>
           <span class="meta">${done} / ${all.length}</span>
         </div>
         ${ws.map(rowHtml).join('')}
@@ -1101,6 +1449,11 @@ function renderList(){
     }).join('');
   }
   body.innerHTML=html||'<p class="note">該当する単語がありません。</p>';
+  body.querySelectorAll('[data-list-say]').forEach(el=>{
+    const play=()=>{ const w=DB.words.find(x=>x.id==el.dataset.listSay); if(w) speak(w.word); };
+    el.onclick=play;
+    el.onkeydown=ev=>{ if(ev.key==='Enter'||ev.key===' '){ ev.preventDefault(); play(); } };
+  });
   body.querySelectorAll('[data-mark]').forEach(b=>b.onclick=ev=>{
     ev.stopPropagation();
     const w=DB.words.find(x=>x.id==b.dataset.mark); w.done=!w.done; save(); renderList();

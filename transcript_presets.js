@@ -1,0 +1,48 @@
+// Transcript本文ではなく、確認用に抽出した候補語だけを収録する。
+const TRANSCRIPT_PRESETS = [
+  {
+    id: 'spotify-20ZgiJQIHg0A5cNo9yrCjp',
+    type: 'spotify',
+    title: 'Sabah For Sabahans: Understanding MA63, Project IC and Federal-State Tensions',
+    url: 'https://open.spotify.com/episode/20ZgiJQIHg0A5cNo9yrCjp',
+    category: '政治・行政',
+    candidates: [
+      {word:'volatile', ja:'不安定な、一触即発の'},
+      {word:'demographic shift', ja:'人口構成の変化'},
+      {word:'self-determination', ja:'自決権'},
+      {word:'safeguards', ja:'保障措置'},
+      {word:'legally binding', ja:'法的拘束力のある'},
+      {word:'federalism', ja:'連邦主義'},
+      {word:'stifle', ja:'抑え込む、阻害する'},
+      {word:'hegemonic', ja:'覇権的な'},
+      {word:'phantom voters', ja:'架空の有権者'},
+      {word:'patronage', ja:'利権・縁故による恩恵'},
+      {word:'structural imbalances', ja:'構造的不均衡'},
+      {word:'fragmented governance', ja:'分断された統治'},
+      {word:'outmigration', ja:'域外への人口流出'},
+      {word:'marginalization', ja:'周縁化'},
+      {word:'tantamount to', ja:'～に等しい'},
+      {word:'gain traction', ja:'支持や勢いを得る'},
+      {word:'paltry sum', ja:'わずかな金額'},
+      {word:'polity', ja:'政治共同体、国家'},
+      {word:'state prerogative', ja:'州の専権事項'},
+      {word:'overreach', ja:'権限の行き過ぎ'},
+      {word:'revenue entitlement', ja:'歳入を受け取る権利'},
+      {word:'opaque', ja:'不透明な'},
+      {word:'judicial review', ja:'司法審査'},
+      {word:'fiscal powers', ja:'財政権限'},
+      {word:'pluralistic identity', ja:'多元的なアイデンティティ'},
+      {word:'political mileage', ja:'政治的利益'},
+      {word:'statelessness', ja:'無国籍状態'},
+      {word:'disproportionately', ja:'不釣り合いに、過度に'},
+      {word:'fear-mongering', ja:'恐怖をあおること'},
+      {word:'sweep under the rug', ja:'問題を隠す、うやむやにする'},
+      {word:'existential', ja:'存続にかかわる'},
+      {word:'incumbent government', ja:'現政権'},
+      {word:'consolidate power', ja:'権力を固める'},
+      {word:'punch above its weight', ja:'実力以上の影響力を発揮する'},
+      {word:'misconstrued', ja:'誤解された'},
+      {word:'non-negotiable', ja:'交渉の余地がない'}
+    ]
+  }
+];

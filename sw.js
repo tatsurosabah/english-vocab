@@ -1,10 +1,11 @@
-const CACHE = 'ev-v16';
+const CACHE = 'ev-v17';
 const ASSETS = [
   './',
   './index.html',
   './data.js',
   './suggest.js',
   './audio.js',
+  './transcript_presets.js',
   './manifest.json',
   './icon-180.png',
   './icon-512.png'
