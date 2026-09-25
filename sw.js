@@ -1,4 +1,4 @@
-const CACHE = 'ev-v17';
+const CACHE = 'ev-v18';
 const ASSETS = [
   './',
   './index.html',
@@ -30,6 +30,19 @@ self.addEventListener('fetch', e => {
   if (req.method !== 'GET') return;
 
   const url = new URL(req.url);
+  const isNickApi = url.hostname === 'nic-english.com' && url.pathname.startsWith('/wp-json/');
+  if (isNickApi) {
+    e.respondWith(
+      fetch(req)
+        .then(res => {
+          const copy = res.clone();
+          caches.open(CACHE).then(c => c.put(req, copy)).catch(() => {});
+          return res;
+        })
+        .catch(() => caches.match(req))
+    );
+    return;
+  }
   const isDoc = req.mode === 'navigate' || /\.(html|js|json)$/.test(url.pathname) || url.pathname.endsWith('/');
 
   if (isDoc) {

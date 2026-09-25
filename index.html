@@ -73,6 +73,8 @@
   .card .ja{font-size:19px;color:var(--ink);line-height:1.6;}
   .card .ex{font-size:17px;margin-top:20px;line-height:1.55;color:var(--accent);}
   .card .exja{font-size:13px;color:var(--muted);margin-top:6px;line-height:1.6;}
+  .card .nick-source{display:inline-block;margin-top:18px;color:var(--muted);font-size:11px;
+    letter-spacing:.06em;text-decoration:none;border-bottom:1px solid var(--faint);}
   .card .hint{margin-top:24px;font-size:12px;color:var(--faint);letter-spacing:.1em;}
   .spk{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;
     border-radius:50%;border:1px solid var(--hair);background:var(--surface);cursor:pointer;
@@ -453,6 +455,7 @@
       <div class="stat"><div class="n" id="stNew">0</div><div class="l">今日覚えた</div></div>
       <div class="stat"><div class="n" id="stMissed">0</div><div class="l">今日まちがえた</div></div>
       <div class="stat"><div class="n" id="stTotal">0</div><div class="l">習得済み（累計）</div></div>
+      <div class="stat"><div class="n" id="stNick">0 / —</div><div class="l">ニック式 習得</div></div>
       <div class="stat"><div class="n" id="stWords">0</div><div class="l">登録単語数</div></div>
       <div class="stat"><div class="n" id="stCats">0</div><div class="l">カテゴリ数</div></div>
     </div>
@@ -550,6 +553,9 @@ const FALLBACK_WORDS=[
   {word:'salient',ja:'顕著な、目立つ',ex:'The most salient point was cost.',exJa:'最も重要な点はコストだった。',cat:'学術系'},
   {word:'fair shake',ja:'公平な扱い',ex:'Everyone deserves a fair shake.',exJa:'誰もが公平に扱われるべきだ。',cat:'日常会話'},
 ];
+const NICK_CAT='ニック式から探す';
+const NICK_API='https://nic-english.com/wp-json/wp/v2/phrase';
+const NICK_PER_PAGE=100;
 let DB = load();
 save();
 function mergeExamples(db){
@@ -628,7 +634,17 @@ function load(){
   }));
   return ensureShape({ v:SEED_V, metaV:(typeof META_V!=='undefined'?META_V:0), seedAdditionsV:SEED_ADDITIONS_V, words, stats:{}, nextId:words.length+1, remind:'20:00', voice:'' });
 }
-function ensureShape(db){ if(!Array.isArray(db.videos)) db.videos=[]; if(!Array.isArray(db.memos)) db.memos=[]; return db; }
+function ensureShape(db){
+  if(!Array.isArray(db.videos)) db.videos=[];
+  if(!Array.isArray(db.memos)) db.memos=[];
+  if(!db.nick||typeof db.nick!=='object') db.nick={};
+  if(!db.nick.progress||typeof db.nick.progress!=='object'||Array.isArray(db.nick.progress)) db.nick.progress={};
+  if(!db.nick.cache||typeof db.nick.cache!=='object'||Array.isArray(db.nick.cache)) db.nick.cache={};
+  if(!Number.isInteger(db.nick.page)||db.nick.page<1) db.nick.page=1;
+  if(!Number.isInteger(db.nick.total)||db.nick.total<0) db.nick.total=0;
+  if(!Number.isInteger(db.nick.pages)||db.nick.pages<0) db.nick.pages=0;
+  return db;
+}
 function save(){ localStorage.setItem('ev_db', JSON.stringify(DB)); }
 
 function stat(){ const k=todayKey(); return DB.stats[k] ||= {opens:0,viewed:0,neu:0}; }
@@ -835,37 +851,131 @@ document.getElementById('nav').addEventListener('click',e=>{
 /* ---------------- review ---------------- */
 let queue=[], current=null, revealed=false;
 let revCat = 'all';
+let nickLoading=false;
 function shuffle(a){
   for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
   return a;
 }
+function nickDoneCount(){
+  return Object.values(DB.nick.progress||{}).filter(p=>p&&p.done).length;
+}
+function nickProgressFor(id){
+  return DB.nick.progress[String(id)] ||= {done:false,miss:0};
+}
+function decodeNickText(html){
+  const el=document.createElement('textarea'); el.innerHTML=String(html||''); return el.value.trim();
+}
+function nickItemFromApi(item){
+  const title=decodeNickText(item?.title?.rendered||'');
+  const m=title.match(/^(.*?)\s+[–—]\s+(.+)$/);
+  if(!m||!m[1].trim()||!m[2].trim()) return null;
+  let sourceUrl='';
+  try{
+    const u=new URL(item.link);
+    if(u.protocol==='https:'&&u.hostname==='nic-english.com'&&u.pathname.startsWith('/phrase/')) sourceUrl=u.href;
+  }catch{}
+  return {
+    nickId:Number(item.id),word:m[2].trim(),ja:m[1].trim(),ex:'',exJa:'',
+    source:'ニック式 ひとこと英会話',sourceUrl,sourceDate:String(item.date||'').slice(0,10)
+  };
+}
+async function fetchNickPage(page){
+  const cached=Array.isArray(DB.nick.cache[String(page)])?DB.nick.cache[String(page)]:null;
+  const staleFirst=page===1&&Date.now()-(DB.nick.syncedAt||0)>6*60*60*1000;
+  if(cached&&cached.length&&!staleFirst) return cached;
+  const params=new URLSearchParams({
+    per_page:String(NICK_PER_PAGE),page:String(page),orderby:'date',order:'desc',
+    _fields:'id,date,link,title'
+  });
+  try{
+    const r=await fetch(`${NICK_API}?${params}`);
+    if(!r.ok) throw new Error(`HTTP ${r.status}`);
+    const total=Number(r.headers.get('X-WP-Total'))||DB.nick.total||0;
+    const pages=Number(r.headers.get('X-WP-TotalPages'))||Math.ceil(total/NICK_PER_PAGE)||0;
+    const raw=await r.json();
+    const items=raw.map(nickItemFromApi).filter(Boolean);
+    DB.nick.total=total; DB.nick.pages=pages;
+    DB.nick.cache[String(page)]=items;
+    DB.nick.syncedAt=Date.now();
+    save();
+    return items;
+  }catch(e){
+    if(cached&&cached.length) return cached;
+    throw e;
+  }
+}
+function renderNickMessage(message,retry=false){
+  current=null;
+  document.getElementById('revActions').style.visibility='hidden';
+  document.getElementById('revStage').innerHTML=`<div class="rev-empty">
+    <div class="big term">N</div><div>${trEsc(message)}</div>
+    ${retry?'<button class="rowbtn" id="btnNickRetry">もう一度試す</button>':''}</div>`;
+  if(retry) document.getElementById('btnNickRetry').onclick=()=>loadNickQueue();
+}
+async function loadNickQueue(){
+  if(nickLoading||revCat!==NICK_CAT) return;
+  nickLoading=true;
+  renderNickMessage('公式バックナンバーを読み込んでいます…');
+  try{
+    let page=DB.nick.page||1;
+    for(let n=0;n<40;n++){
+      const items=await fetchNickPage(page);
+      if(revCat!==NICK_CAT){ nickLoading=false; return; }
+      const pending=items.filter(item=>!nickProgressFor(item.nickId).done);
+      if(pending.length){
+        DB.nick.page=page; queue=pending; save();
+        nickLoading=false; renderRevCats(); updateProgress(); nextCard(); return;
+      }
+      if(DB.nick.pages&&page>=DB.nick.pages){
+        nickLoading=false; renderRevCats(); updateProgress();
+        renderNickMessage('公開中のフレーズをすべて習得しました。'); return;
+      }
+      page++; DB.nick.page=page; save();
+    }
+    throw new Error('page limit');
+  }catch(e){
+    nickLoading=false;
+    renderNickMessage('読み込めませんでした。通信状態を確認してください。',true);
+  }
+}
 function buildQueue(){
+  if(revCat===NICK_CAT) return [];
   return shuffle(DB.words.filter(w=>!w.done && (revCat==='all'||w.cat===revCat)));
+}
+function startReviewCategory(){
+  queue=[]; current=null;
+  if(revCat===NICK_CAT) loadNickQueue();
+  else { queue=buildQueue(); nextCard(); updateProgress(); }
 }
 function renderRevCats(){
   const box=document.getElementById('revCats');
   if(!box) return;
   const cats=[...new Set(DB.words.filter(w=>!w.done).map(w=>w.cat))];
-  if(revCat!=='all' && !cats.includes(revCat)) revCat='all';
+  if(revCat!=='all'&&revCat!==NICK_CAT&&!cats.includes(revCat)) revCat='all';
   const n=c=>DB.words.filter(w=>!w.done && w.cat===c).length;
   box.innerHTML=`<button data-c="all" class="${revCat==='all'?'active':''}">すべて</button>`+
+    `<button data-c="${NICK_CAT}" class="${revCat===NICK_CAT?'active':''}">${NICK_CAT} ${nickDoneCount()}/${DB.nick.total||'—'}</button>`+
     cats.map(c=>`<button data-c="${trEsc(c)}" class="${revCat===c?'active':''}">${trEsc(c)} ${n(c)}</button>`).join('');
   box.querySelectorAll('button').forEach(b=>b.onclick=()=>{
     revCat=b.dataset.c;
     renderRevCats();
-    queue=buildQueue(); nextCard(); updateProgress();
+    startReviewCategory();
   });
 }
 function enterReview(){
   stat().opens++; save();
   renderRevCats();
-  queue=buildQueue();
-  nextCard();
-  updateProgress();
+  startReviewCategory();
 }
 function todayReviewed(){ return reviewedToday; }
 let reviewedToday=0;
 function updateProgress(){
+  if(revCat===NICK_CAT){
+    const done=nickDoneCount(),total=DB.nick.total||'—';
+    document.getElementById('revProgress').textContent=
+      `${NICK_CAT} ・ 今日 ${Math.min(reviewedToday,20)} / 20 ・ 習得 ${done} / ${total}`;
+    return;
+  }
   const left=DB.words.filter(w=>!w.done && (revCat==='all'||w.cat===revCat)).length;
   const label=revCat==='all'?'':`${revCat} ・ `;
   document.getElementById('revProgress').textContent=`${label}今日 ${Math.min(reviewedToday,20)} / 20 ・ 残り ${left}`;
@@ -874,6 +984,7 @@ function nextCard(){
   const stage=document.getElementById('revStage');
   const actions=document.getElementById('revActions');
   if(queue.length===0){
+    if(revCat===NICK_CAT){ loadNickQueue(); return; }
     current=null;
     actions.style.visibility='hidden';
     stage.innerHTML=`<div class="rev-empty"><div class="big term">—</div>
@@ -894,6 +1005,7 @@ function nextCard(){
         <div class="ja">${trEsc(current.ja)}</div>
         ${current.ex?`<div class="ex-line"><span class="ex">${trEsc(current.ex)}</span>${spkBtn(current.ex)}</div>`:''}
         ${current.exJa?`<div class="exja">${trEsc(current.exJa)}</div>`:''}
+        ${current.nickId&&current.sourceUrl?`<a class="nick-source" href="${trEsc(current.sourceUrl)}" target="_blank" rel="noopener">ニック式・公式ページ${current.sourceDate?` ・ ${trEsc(current.sourceDate)}`:''}</a>`:''}
       </div>
       <div class="hint" id="hint">タップで意味</div>
     </div>`;
@@ -916,16 +1028,25 @@ function reveal(){
 }
 function judge(known){
   if(!current) return;
-  const w=DB.words.find(x=>x.id===current.id);
-  if(known && w && !w.done){ w.done=true; stat().neu++; }
+  if(current.nickId){
+    const p=nickProgressFor(current.nickId);
+    if(known&&!p.done){ p.done=true; p.doneAt=todayKey(); stat().neu++; }
+  }else{
+    const w=DB.words.find(x=>x.id===current.id);
+    if(known&&w&&!w.done){ w.done=true; stat().neu++; }
+  }
   reviewedToday++;
-  save(); updateProgress(); nextCard();
+  save(); renderRevCats(); updateProgress(); nextCard();
 }
 document.getElementById('btnKnown').onclick=()=>judge(true);
 document.getElementById('btnStill').onclick=()=>{
   if(current){
-    const w=DB.words.find(x=>x.id===current.id);
-    if(w){ w.miss=(w.miss||0)+1; w.lastMiss=todayKey(); }
+    if(current.nickId){
+      const p=nickProgressFor(current.nickId); p.miss=(p.miss||0)+1; p.lastMiss=todayKey();
+    }else{
+      const w=DB.words.find(x=>x.id===current.id);
+      if(w){ w.miss=(w.miss||0)+1; w.lastMiss=todayKey(); }
+    }
     stat().missed=(stat().missed||0)+1;
     queue.push(current);
   }
@@ -1284,7 +1405,16 @@ document.getElementById('btnQuickGpt').onclick=async()=>{
 function renderHardTop(){
   const box=document.getElementById('hardTop');
   if(!box) return;
-  const top=DB.words.filter(w=>(w.miss||0)>0).sort((a,b)=>(b.miss||0)-(a.miss||0)).slice(0,10);
+  const nickById=new Map();
+  Object.values(DB.nick.cache||{}).forEach(items=>{
+    if(Array.isArray(items)) items.forEach(item=>nickById.set(String(item.nickId),item));
+  });
+  const nickHard=Object.entries(DB.nick.progress||{}).flatMap(([id,p])=>{
+    const item=nickById.get(id);
+    return item&&(p?.miss||0)>0?[{word:item.word,ja:item.ja,miss:p.miss,nickId:item.nickId}]:[];
+  });
+  const top=DB.words.filter(w=>(w.miss||0)>0).concat(nickHard)
+    .sort((a,b)=>(b.miss||0)-(a.miss||0)).slice(0,10);
   if(top.length===0){
     box.innerHTML='<p class="note">まだ記録がありません。復習で「まだ」を押すとここに溜まります。</p>';
     return;
@@ -1680,15 +1810,17 @@ document.getElementById('btnImport').onclick=()=>{
 /* ---------------- stats ---------------- */
 function renderStats(){
   const s=stat();
+  const nickDone=nickDoneCount();
   document.getElementById('stTimeToday').textContent=fmtDur(todayMs());
   document.getElementById('stTimeWeek').textContent=fmtDur(weekMs());
   document.getElementById('stOpens').textContent=s.opens;
   document.getElementById('stViewed').textContent=s.viewed;
   document.getElementById('stNew').textContent=s.neu;
   document.getElementById('stMissed').textContent=s.missed||0;
-  document.getElementById('stTotal').textContent=DB.words.filter(w=>w.done).length;
+  document.getElementById('stTotal').textContent=DB.words.filter(w=>w.done).length+nickDone;
+  document.getElementById('stNick').textContent=`${nickDone} / ${DB.nick.total||'—'}`;
   document.getElementById('stWords').textContent=DB.words.length;
-  document.getElementById('stCats').textContent=new Set(DB.words.map(w=>w.cat)).size;
+  document.getElementById('stCats').textContent=new Set(DB.words.map(w=>w.cat)).size+1;
   renderHardTop();
   document.getElementById('remindTime').value=DB.remind;
   const sk=document.getElementById('syncKeyInput');
